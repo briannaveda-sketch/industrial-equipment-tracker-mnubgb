@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Platform } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -19,32 +19,7 @@ export default function HomeScreen() {
   const [summaries, setSummaries] = useState<StatusSummary[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadData();
-    requestNotificationPermissions();
-  }, []);
-
-  const requestNotificationPermissions = async () => {
-    await notificationService.requestPermissions();
-  };
-
-  const loadData = async () => {
-    try {
-      const data = await storageService.getAllEquipment();
-      const activeEquipment = data.filter(e => !e.deleted);
-      setEquipment(activeEquipment);
-      calculateSummaries(activeEquipment);
-      
-      // Check for overdue equipment
-      await notificationService.checkOverdueEquipment(activeEquipment);
-    } catch (error) {
-      console.error('Error loading data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const calculateSummaries = (data: Equipment[]) => {
+  const calculateSummaries = useCallback((data: Equipment[]) => {
     const summaryMap: { [key: string]: StatusSummary } = {};
 
     PLANTS.forEach(plant => {
@@ -81,7 +56,32 @@ export default function HomeScreen() {
 
     const summariesArray = Object.values(summaryMap).filter(s => s.total > 0);
     setSummaries(summariesArray);
-  };
+  }, []);
+
+  const loadData = useCallback(async () => {
+    try {
+      const data = await storageService.getAllEquipment();
+      const activeEquipment = data.filter(e => !e.deleted);
+      setEquipment(activeEquipment);
+      calculateSummaries(activeEquipment);
+      
+      // Check for overdue equipment
+      await notificationService.checkOverdueEquipment(activeEquipment);
+    } catch (error) {
+      console.error('Error loading data:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [calculateSummaries]);
+
+  const requestNotificationPermissions = useCallback(async () => {
+    await notificationService.requestPermissions();
+  }, []);
+
+  useEffect(() => {
+    loadData();
+    requestNotificationPermissions();
+  }, [loadData, requestNotificationPermissions]);
 
   const handleExport = async () => {
     try {

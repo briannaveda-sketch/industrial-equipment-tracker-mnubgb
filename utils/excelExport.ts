@@ -35,7 +35,7 @@ export const exportToExcel = async (equipment: Equipment[], t: any): Promise<voi
 
     // Save to file
     const fileName = `equipment_export_${new Date().toISOString().split('T')[0]}.csv`;
-    const fileUri = FileSystem.documentDirectory + fileName;
+    const fileUri = `${FileSystem.documentDirectory}${fileName}`;
     
     await FileSystem.writeAsStringAsync(fileUri, csvContent, {
       encoding: FileSystem.EncodingType.UTF8,

@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, Modal } from 'react-native';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -30,11 +30,7 @@ export default function EquipmentDetailScreen() {
   const [deletionReason, setDeletionReason] = useState<DeletionReason>('UPLOAD ERROR');
   const [deletionDetails, setDeletionDetails] = useState('');
 
-  useEffect(() => {
-    loadEquipment();
-  }, [id]);
-
-  const loadEquipment = async () => {
+  const loadEquipment = useCallback(async () => {
     try {
       const allEquipment = await storageService.getAllEquipment();
       const found = allEquipment.find(e => e.id === id);
@@ -49,7 +45,11 @@ export default function EquipmentDetailScreen() {
     } catch (error) {
       console.error('Error loading equipment:', error);
     }
-  };
+  }, [id]);
+
+  useEffect(() => {
+    loadEquipment();
+  }, [loadEquipment]);
 
   const handleSave = async () => {
     if (!tag.trim()) {

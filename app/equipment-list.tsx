@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Alert } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -16,15 +16,7 @@ export default function EquipmentListScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    loadEquipment();
-  }, []);
-
-  useEffect(() => {
-    filterEquipment();
-  }, [searchQuery, equipment]);
-
-  const loadEquipment = async () => {
+  const loadEquipment = useCallback(async () => {
     try {
       const data = await storageService.getAllEquipment();
       const activeEquipment = data.filter(e => !e.deleted);
@@ -35,9 +27,9 @@ export default function EquipmentListScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const filterEquipment = () => {
+  const filterEquipment = useCallback(() => {
     if (!searchQuery.trim()) {
       setFilteredEquipment(equipment);
       return;
@@ -51,7 +43,15 @@ export default function EquipmentListScreen() {
       e.status.toLowerCase().includes(query)
     );
     setFilteredEquipment(filtered);
-  };
+  }, [searchQuery, equipment]);
+
+  useEffect(() => {
+    loadEquipment();
+  }, [loadEquipment]);
+
+  useEffect(() => {
+    filterEquipment();
+  }, [filterEquipment]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
