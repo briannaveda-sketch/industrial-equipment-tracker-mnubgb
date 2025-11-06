@@ -1,6 +1,7 @@
 
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
+import { Paths } from 'expo-file-system';
 import { Equipment } from '../types/equipment';
 
 export const exportToExcel = async (equipment: Equipment[], t: any): Promise<void> => {
@@ -33,9 +34,9 @@ export const exportToExcel = async (equipment: Equipment[], t: any): Promise<voi
       csvContent += '\n';
     });
 
-    // Save to file
+    // Save to file using legacy API
     const fileName = `equipment_export_${new Date().toISOString().split('T')[0]}.csv`;
-    const fileUri = `${FileSystem.documentDirectory}${fileName}`;
+    const fileUri = `${Paths.cache.uri}/${fileName}`;
     
     await FileSystem.writeAsStringAsync(fileUri, csvContent, {
       encoding: FileSystem.EncodingType.UTF8,
