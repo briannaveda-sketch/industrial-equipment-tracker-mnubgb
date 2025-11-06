@@ -1,104 +1,196 @@
-import React from "react";
-import { Stack, Link } from "expo-router";
-import { FlatList, Pressable, StyleSheet, View, Text, Alert, Platform } from "react-native";
-import { IconSymbol } from "@/components/IconSymbol";
-import { GlassView } from "expo-glass-effect";
-import { useTheme } from "@react-navigation/native";
 
-const ICON_COLOR = "#007AFF";
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Platform } from 'react-native';
+import { Stack, useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
+import { IconSymbol } from '@/components/IconSymbol';
+import { colors, commonStyles } from '@/styles/commonStyles';
+import { storageService } from '@/utils/storage';
+import { notificationService } from '@/utils/notifications';
+import { Equipment, StatusSummary, PlantType } from '@/types/equipment';
+import { exportToExcel } from '@/utils/excelExport';
+
+const PLANTS: PlantType[] = ['CD-1', 'CD-2', 'CD-3', 'CD-4', 'AV-2', 'AV-3', 'PG-1', 'SER', 'DESAL', 'BC-4', 'BC-5', 'OTHER'];
 
 export default function HomeScreen() {
-  const theme = useTheme();
-  const modalDemos = [
-    {
-      title: "Standard Modal",
-      description: "Full screen modal presentation",
-      route: "/modal",
-      color: "#007AFF",
-    },
-    {
-      title: "Form Sheet",
-      description: "Bottom sheet with detents and grabber",
-      route: "/formsheet",
-      color: "#34C759",
-    },
-    {
-      title: "Transparent Modal",
-      description: "Overlay without obscuring background",
-      route: "/transparent-modal",
-      color: "#FF9500",
+  const { t } = useTranslation();
+  const router = useRouter();
+  const [equipment, setEquipment] = useState<Equipment[]>([]);
+  const [summaries, setSummaries] = useState<StatusSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadData();
+    requestNotificationPermissions();
+  }, []);
+
+  const requestNotificationPermissions = async () => {
+    await notificationService.requestPermissions();
+  };
+
+  const loadData = async () => {
+    try {
+      const data = await storageService.getAllEquipment();
+      const activeEquipment = data.filter(e => !e.deleted);
+      setEquipment(activeEquipment);
+      calculateSummaries(activeEquipment);
+      
+      // Check for overdue equipment
+      await notificationService.checkOverdueEquipment(activeEquipment);
+    } catch (error) {
+      console.error('Error loading data:', error);
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
 
-  const renderModalDemo = ({ item }: { item: (typeof modalDemos)[0] }) => (
-    <GlassView style={[
-      styles.demoCard,
-      Platform.OS !== 'ios' && { backgroundColor: theme.dark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }
-    ]} glassEffectStyle="regular">
-      <View style={[styles.demoIcon, { backgroundColor: item.color }]}>
-        <IconSymbol name="square.grid.3x3" color="white" size={24} />
-      </View>
-      <View style={styles.demoContent}>
-        <Text style={[styles.demoTitle, { color: theme.colors.text }]}>{item.title}</Text>
-        <Text style={[styles.demoDescription, { color: theme.dark ? '#98989D' : '#666' }]}>{item.description}</Text>
-      </View>
-      <Link href={item.route as any} asChild>
-        <Pressable>
-          <GlassView style={[
-            styles.tryButton,
-            Platform.OS !== 'ios' && { backgroundColor: theme.dark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)' }
-          ]} glassEffectStyle="clear">
-            <Text style={[styles.tryButtonText, { color: theme.colors.primary }]}>Try It</Text>
-          </GlassView>
-        </Pressable>
-      </Link>
-    </GlassView>
-  );
+  const calculateSummaries = (data: Equipment[]) => {
+    const summaryMap: { [key: string]: StatusSummary } = {};
 
-  const renderHeaderRight = () => (
-    <Pressable
-      onPress={() => Alert.alert("Not Implemented", "This feature is not implemented yet")}
-      style={styles.headerButtonContainer}
-    >
-      <IconSymbol name="plus" color={theme.colors.primary} />
-    </Pressable>
-  );
+    PLANTS.forEach(plant => {
+      summaryMap[plant] = {
+        plant,
+        available: 0,
+        inOperation: 0,
+        notAvailable: 0,
+        inWorkshop: 0,
+        total: 0,
+      };
+    });
 
-  const renderHeaderLeft = () => (
-    <Pressable
-      onPress={() => Alert.alert("Not Implemented", "This feature is not implemented yet")}
-      style={styles.headerButtonContainer}
-    >
-      <IconSymbol
-        name="gear"
-        color={theme.colors.primary}
-      />
-    </Pressable>
-  );
+    data.forEach(item => {
+      const summary = summaryMap[item.plant];
+      if (summary) {
+        summary.total++;
+        switch (item.status) {
+          case 'AVAILABLE':
+            summary.available++;
+            break;
+          case 'IN OPERATION':
+            summary.inOperation++;
+            break;
+          case 'NOT AVAILABLE':
+            summary.notAvailable++;
+            break;
+          case 'IN WORKSHOP':
+            summary.inWorkshop++;
+            break;
+        }
+      }
+    });
+
+    const summariesArray = Object.values(summaryMap).filter(s => s.total > 0);
+    setSummaries(summariesArray);
+  };
+
+  const handleExport = async () => {
+    try {
+      const allEquipment = await storageService.getAllEquipment();
+      await exportToExcel(allEquipment, t);
+      Alert.alert(t('exportSuccess'), '');
+    } catch (error) {
+      console.error('Export error:', error);
+      Alert.alert(t('exportError'), '');
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'AVAILABLE':
+        return colors.success;
+      case 'IN OPERATION':
+        return colors.primary;
+      case 'NOT AVAILABLE':
+        return colors.highlight;
+      case 'IN WORKSHOP':
+        return colors.warning;
+      default:
+        return colors.textSecondary;
+    }
+  };
 
   return (
     <>
-      {Platform.OS === 'ios' && (
-        <Stack.Screen
-          options={{
-            title: "Building the app...",
-            headerRight: renderHeaderRight,
-            headerLeft: renderHeaderLeft,
-          }}
-        />
-      )}
-      <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-        <FlatList
-          data={modalDemos}
-          renderItem={renderModalDemo}
-          keyExtractor={(item) => item.route}
-          contentContainerStyle={[
-            styles.listContainer,
-            Platform.OS !== 'ios' && styles.listContainerWithTabBar
-          ]}
-          contentInsetAdjustmentBehavior="automatic"
+      <Stack.Screen
+        options={{
+          title: t('home'),
+          headerRight: () => (
+            <TouchableOpacity onPress={handleExport} style={styles.headerButton}>
+              <IconSymbol name="arrow.down.doc" size={24} color={colors.primary} />
+            </TouchableOpacity>
+          ),
+        }}
+      />
+      <View style={[commonStyles.container, styles.container]}>
+        <ScrollView 
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
-        />
+        >
+          {/* Action Buttons */}
+          <View style={styles.actionContainer}>
+            <TouchableOpacity
+              style={[styles.actionButton, { backgroundColor: colors.primary }]}
+              onPress={() => router.push('/add-equipment')}
+            >
+              <IconSymbol name="plus.circle.fill" size={32} color={colors.card} />
+              <Text style={styles.actionButtonText}>{t('uploadNewEquipment')}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.actionButton, { backgroundColor: colors.secondary }]}
+              onPress={() => router.push('/equipment-list')}
+            >
+              <IconSymbol name="pencil.circle.fill" size={32} color={colors.card} />
+              <Text style={styles.actionButtonText}>{t('updateEquipmentStatus')}</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Status Summary */}
+          <View style={styles.summarySection}>
+            <Text style={styles.sectionTitle}>{t('statusSummary')}</Text>
+            
+            {summaries.length === 0 ? (
+              <View style={commonStyles.card}>
+                <Text style={[commonStyles.textSecondary, { textAlign: 'center' }]}>
+                  {t('noEquipment')}
+                </Text>
+              </View>
+            ) : (
+              summaries.map((summary) => (
+                <View key={summary.plant} style={commonStyles.card}>
+                  <Text style={styles.plantName}>{summary.plant}</Text>
+                  <View style={styles.summaryGrid}>
+                    <View style={styles.summaryItem}>
+                      <View style={[styles.statusDot, { backgroundColor: colors.success }]} />
+                      <Text style={styles.summaryLabel}>{t('available')}</Text>
+                      <Text style={styles.summaryValue}>{summary.available}</Text>
+                    </View>
+                    <View style={styles.summaryItem}>
+                      <View style={[styles.statusDot, { backgroundColor: colors.primary }]} />
+                      <Text style={styles.summaryLabel}>{t('inOperation')}</Text>
+                      <Text style={styles.summaryValue}>{summary.inOperation}</Text>
+                    </View>
+                    <View style={styles.summaryItem}>
+                      <View style={[styles.statusDot, { backgroundColor: colors.highlight }]} />
+                      <Text style={styles.summaryLabel}>{t('notAvailable')}</Text>
+                      <Text style={styles.summaryValue}>{summary.notAvailable}</Text>
+                    </View>
+                    <View style={styles.summaryItem}>
+                      <View style={[styles.statusDot, { backgroundColor: colors.warning }]} />
+                      <Text style={styles.summaryLabel}>{t('inWorkshop')}</Text>
+                      <Text style={styles.summaryValue}>{summary.inWorkshop}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.totalRow}>
+                    <Text style={styles.totalLabel}>{t('total')}</Text>
+                    <Text style={styles.totalValue}>{summary.total}</Text>
+                  </View>
+                </View>
+              ))
+            )}
+          </View>
+        </ScrollView>
       </View>
     </>
   );
@@ -106,56 +198,100 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   container: {
+    paddingBottom: Platform.OS === 'ios' ? 0 : 80,
+  },
+  scrollView: {
     flex: 1,
-    // backgroundColor handled dynamically
   },
-  listContainer: {
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-  },
-  listContainerWithTabBar: {
-    paddingBottom: 100, // Extra padding for floating tab bar
-  },
-  demoCard: {
-    borderRadius: 12,
+  scrollContent: {
     padding: 16,
+    paddingBottom: Platform.OS === 'ios' ? 100 : 120,
+  },
+  headerButton: {
+    padding: 8,
+    marginRight: 8,
+  },
+  actionContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 24,
+  },
+  actionButton: {
+    flex: 1,
+    padding: 20,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 120,
+    boxShadow: '0px 4px 12px rgba(0, 0, 0, 0.15)',
+    elevation: 4,
+  },
+  actionButtonText: {
+    color: colors.card,
+    fontSize: 16,
+    fontWeight: '600',
+    marginTop: 12,
+    textAlign: 'center',
+  },
+  summarySection: {
+    flex: 1,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 16,
+  },
+  plantName: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.primary,
     marginBottom: 12,
+  },
+  summaryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 12,
+  },
+  summaryItem: {
+    flex: 1,
+    minWidth: '45%',
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 6,
   },
-  demoIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  demoContent: {
-    flex: 1,
-  },
-  demoTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 4,
-    // color handled dynamically
-  },
-  demoDescription: {
-    fontSize: 14,
-    lineHeight: 18,
-    // color handled dynamically
-  },
-  headerButtonContainer: {
-    padding: 6,
-  },
-  tryButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+  statusDot: {
+    width: 12,
+    height: 12,
     borderRadius: 6,
   },
-  tryButtonText: {
-    fontSize: 14,
+  summaryLabel: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    flex: 1,
+  },
+  summaryValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.text,
+  },
+  totalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
+  totalLabel: {
+    fontSize: 16,
     fontWeight: '600',
-    // color handled dynamically
+    color: colors.text,
+  },
+  totalValue: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.primary,
   },
 });

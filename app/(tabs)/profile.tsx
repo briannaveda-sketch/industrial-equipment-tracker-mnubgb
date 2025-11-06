@@ -1,91 +1,212 @@
-import React from "react";
-import { View, Text, StyleSheet, ScrollView, Platform } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { IconSymbol } from "@/components/IconSymbol";
-import { GlassView } from "expo-glass-effect";
-import { useTheme } from "@react-navigation/native";
+
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native';
+import { useTranslation } from 'react-i18next';
+import { IconSymbol } from '@/components/IconSymbol';
+import { colors, commonStyles } from '@/styles/commonStyles';
+import { storageService } from '@/utils/storage';
+import { changeLanguage } from '@/utils/i18n';
 
 export default function ProfileScreen() {
-  const theme = useTheme();
+  const { t, i18n } = useTranslation();
+  const [user, setUser] = useState<any>(null);
+
+  useEffect(() => {
+    loadUser();
+  }, []);
+
+  const loadUser = async () => {
+    const userData = await storageService.getUser();
+    setUser(userData);
+  };
+
+  const handleLanguageChange = async (lang: string) => {
+    await changeLanguage(lang);
+  };
+
+  const handleSignOut = async () => {
+    Alert.alert(
+      t('logout'),
+      'Are you sure you want to sign out?',
+      [
+        { text: t('cancel'), style: 'cancel' },
+        {
+          text: t('logout'),
+          style: 'destructive',
+          onPress: async () => {
+            await storageService.clearUser();
+            setUser(null);
+          },
+        },
+      ]
+    );
+  };
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.background }]} edges={['top']}>
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={[
-          styles.contentContainer,
-          Platform.OS !== 'ios' && styles.contentContainerWithTabBar
-        ]}
-      >
-        <GlassView style={[
-          styles.profileHeader,
-          Platform.OS !== 'ios' && { backgroundColor: theme.dark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }
-        ]} glassEffectStyle="regular">
-          <IconSymbol name="person.circle.fill" size={80} color={theme.colors.primary} />
-          <Text style={[styles.name, { color: theme.colors.text }]}>John Doe</Text>
-          <Text style={[styles.email, { color: theme.dark ? '#98989D' : '#666' }]}>john.doe@example.com</Text>
-        </GlassView>
+    <View style={commonStyles.container}>
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+        <View style={styles.header}>
+          <View style={styles.avatarContainer}>
+            <IconSymbol name="person.circle.fill" size={80} color={colors.primary} />
+          </View>
+          {user ? (
+            <>
+              <Text style={styles.userName}>{user.name || 'User'}</Text>
+              <Text style={styles.userEmail}>{user.email || ''}</Text>
+            </>
+          ) : (
+            <Text style={styles.signInPrompt}>{t('signIn')}</Text>
+          )}
+        </View>
 
-        <GlassView style={[
-          styles.section,
-          Platform.OS !== 'ios' && { backgroundColor: theme.dark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)' }
-        ]} glassEffectStyle="regular">
-          <View style={styles.infoRow}>
-            <IconSymbol name="phone.fill" size={20} color={theme.dark ? '#98989D' : '#666'} />
-            <Text style={[styles.infoText, { color: theme.colors.text }]}>+1 (555) 123-4567</Text>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>{t('language')}</Text>
+          <View style={styles.languageContainer}>
+            <TouchableOpacity
+              style={[
+                styles.languageButton,
+                i18n.language === 'en' && { backgroundColor: colors.primary },
+              ]}
+              onPress={() => handleLanguageChange('en')}
+            >
+              <Text style={[
+                styles.languageText,
+                i18n.language === 'en' && { color: colors.card },
+              ]}>
+                {t('english')}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.languageButton,
+                i18n.language === 'es' && { backgroundColor: colors.primary },
+              ]}
+              onPress={() => handleLanguageChange('es')}
+            >
+              <Text style={[
+                styles.languageText,
+                i18n.language === 'es' && { color: colors.card },
+              ]}>
+                {t('spanish')}
+              </Text>
+            </TouchableOpacity>
           </View>
-          <View style={styles.infoRow}>
-            <IconSymbol name="location.fill" size={20} color={theme.dark ? '#98989D' : '#666'} />
-            <Text style={[styles.infoText, { color: theme.colors.text }]}>San Francisco, CA</Text>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>App Information</Text>
+          <View style={commonStyles.card}>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Version</Text>
+              <Text style={styles.infoValue}>1.0.0</Text>
+            </View>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Build</Text>
+              <Text style={styles.infoValue}>2024.01</Text>
+            </View>
           </View>
-        </GlassView>
+        </View>
+
+        {user && (
+          <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
+            <IconSymbol name="arrow.right.square" size={20} color={colors.highlight} />
+            <Text style={styles.signOutText}>{t('logout')}</Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    // backgroundColor handled dynamically
-  },
-  container: {
+  scrollView: {
     flex: 1,
   },
-  contentContainer: {
-    padding: 20,
+  scrollContent: {
+    padding: 16,
+    paddingBottom: 100,
   },
-  contentContainerWithTabBar: {
-    paddingBottom: 100, // Extra padding for floating tab bar
-  },
-  profileHeader: {
+  header: {
     alignItems: 'center',
-    borderRadius: 12,
-    padding: 32,
+    paddingVertical: 32,
+  },
+  avatarContainer: {
     marginBottom: 16,
-    gap: 12,
   },
-  name: {
+  userName: {
     fontSize: 24,
-    fontWeight: 'bold',
-    // color handled dynamically
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 4,
   },
-  email: {
+  userEmail: {
     fontSize: 16,
-    // color handled dynamically
+    color: colors.textSecondary,
+  },
+  signInPrompt: {
+    fontSize: 16,
+    color: colors.primary,
+    fontWeight: '600',
   },
   section: {
-    borderRadius: 12,
-    padding: 20,
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: colors.text,
+    marginBottom: 12,
+  },
+  languageContainer: {
+    flexDirection: 'row',
     gap: 12,
+  },
+  languageButton: {
+    flex: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+  },
+  languageText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
   },
   infoRow: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 12,
+    paddingVertical: 8,
   },
-  infoText: {
+  infoLabel: {
     fontSize: 16,
-    // color handled dynamically
+    color: colors.textSecondary,
+  },
+  infoValue: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  signOutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 16,
+    borderRadius: 8,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.highlight,
+    marginTop: 16,
+  },
+  signOutText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.highlight,
   },
 });
